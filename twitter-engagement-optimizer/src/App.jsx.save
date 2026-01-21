@@ -1,0 +1,49 @@
+import React, { useState, useEffect } from 'react';
+import TwitterAPIService from './services/twitterAPI';
+import DataProcessor from './services/dataProcessor';
+// Import your components
+
+function App() {
+  const [twitterAPI, setTwitterAPI] = useState(null);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleConnect = async (bearerToken) => {
+    setIsLoading(true);
+    try {
+      const api = new TwitterAPIService(bearerToken);
+      setTwitterAPI(api);
+      
+      // Fetch user data
+      const userData = await api.getAuthenticatedUser();
+      const userId = userData.data.id;
+      
+      // Fetch tweets
+      const tweets = await api.getUserTweets(userId);
+      
+      // Process data
+      const analytics = {
+        bestTimes: DataProcessor.analyzeBestTimes(tweets.data),
+        trendingHashtags: DataProcessor.extractTrendingHashtags(tweets.data),
+        contentTypes: DataProcessor.analyzeContentTypes(tweets.data),
+        user: userData.data
+      };
+      
+      const recommendations = DataProcessor.generateRecommendations(analytics);
+      
+      setAnalyticsData({ ...analytics, recommendations });
+    } catch (error) {
+      console.error('Error connecting:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="App">
+      {/* Your UI components here */}
+    </div>
+  );
+}
+
+export default App;
