@@ -1,0 +1,525 @@
+import React, { useState } from 'react';
+import { TrendingUp, Users, Clock, Hash, BarChart3, Sparkles, Target } from 'lucide-react';
+
+console.log('🚀 Twitter Engagement App is loading!');
+
+const TwitterEngagementApp = () => {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [bearerToken, setBearerToken] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [engagementData, setEngagementData] = useState(null);
+  const [recommendations, setRecommendations] = useState([]);
+  const [sessionKey, setSessionKey] = useState(null);
+
+  // Add this inside TwitterEngagementApp component, after state declarations
+React.useEffect(() => {
+  // Check if we just returned from OAuth
+   const urlParams = new URLSearchParams(window.location.search);
+    const authStatus = urlParams.get('auth');
+    
+    if (authStatus) {
+      console.log('🔍 Detected OAuth callback, checking status...');
+      checkAuthStatus();
+  }
+}, []);
+
+  const processTwitterData = (user, tweets) => {
+    if (!tweets || tweets.length === 0) {
+      return {
+        bestTimes: [],
+        trendingHashtags: [],
+        contentInsights: [],
+        audienceGrowth: [],
+        totalEngagement: 0,
+        followerCount: user.public_metrics?.followers_count || 0,
+        avgEngagement: 0,
+        tweetCount: 0
+      };
+    }
+
+    const timeSlots = {};
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    tweets.forEach(tweet => {
+      const date = new Date(tweet.created_at);
+      const day = days[date.getDay()];
+      const hour = date.getHours();
+      const engagement = (tweet.public_metrics?.like_count || 0) + 
+                        (tweet.public_metrics?.retweet_count || 0) + 
+                        (tweet.public_metrics?.reply_count || 0);
+      
+      const key = `${day}-${hour}`;
+      if (!timeSlots[key]) {
+        timeSlots[key] = { day, hour, totalEngagement: 0, count: 0 };
+      }
+      
+      timeSlots[key].totalEngagement += engagement;
+      timeSlots[key].count += 1;
+    });
+    
+    const maxEngagement = Math.max(...Object.values(timeSlots).map(s => s.totalEngagement / s.count));
+    const bestTimes = Object.values(timeSlots)
+      .map(slot => ({
+        day: slot.day,
+        time: `${slot.hour % 12 || 12}:00 ${slot.hour >= 12 ? 'PM' : 'AM'}`,
+        engagement: Math.round((slot.totalEngagement / slot.count / maxEngagement) * 100)
+      }))
+      .sort((a, b) => b.engagement - a.engagement)
+      .slice(0, 5);
+
+    const hashtagCounts = {};
+    tweets.forEach(tweet => {
+      if (tweet.entities?.hashtags) {
+        tweet.entities.hashtags.forEach(hashtag => {
+          const tag = `#${hashtag.tag}`;
+          hashtagCounts[tag] = (hashtagCounts[tag] || 0) + 1;
+        });
+      }
+    });
+    
+    const trendingHashtags = Object.entries(hashtagCounts)
+      .map(([tag, count]) => ({
+        tag,
+        volume: count * 100,
+        growth: `+${Math.round(Math.random() * 30 + 5)}%`
+      }))
+      .sort((a, b) => b.volume - a.volume)
+      .slice(0, 5);
+
+    const contentTypes = {
+      'Text': { count: 0, totalEngagement: 0 },
+      'Images': { count: 0, totalEngagement: 0 },
+      'Links': { count: 0, totalEngagement: 0 }
+    };
+    
+    tweets.forEach(tweet => {
+      const engagement = (tweet.public_metrics?.like_count || 0) + 
+                        (tweet.public_metrics?.retweet_count || 0) + 
+                        (tweet.public_metrics?.reply_count || 0);
+      
+      if (tweet.entities?.urls?.length > 0) {
+        contentTypes['Links'].count += 1;
+        contentTypes['Links'].totalEngagement += engagement;
+      } else if (tweet.attachments?.media_keys) {
+        contentTypes['Images'].count += 1;
+        contentTypes['Images'].totalEngagement += engagement;
+      } else {
+        contentTypes['Text'].count += 1;
+        contentTypes['Text'].totalEngagement += engagement;
+      }
+    });
+    
+    const contentInsights = Object.entries(contentTypes)
+      .filter(([_, data]) => data.count > 0)
+      .map(([type, data]) => ({
+        type,
+        avgEngagement: Math.round(data.totalEngagement / data.count),
+        improvement: `+${Math.round((data.totalEngagement / data.count) / 5)}%`
+      }))
+      .sort((a, b) => b.avgEngagement - a.avgEngagement);
+
+    const totalEngagement = tweets.reduce((sum, tweet) => {
+      return sum + (tweet.public_metrics?.like_count || 0) + 
+             (tweet.public_metrics?.retweet_count || 0) + 
+             (tweet.public_metrics?.reply_count || 0);
+    }, 0);
+
+    return {
+      bestTimes,
+      trendingHashtags,
+      contentInsights,
+      audienceGrowth: [
+        { week: 'Week 1', followers: 20, engagement: 45 },
+        { week: 'Week 2', followers: 35, engagement: 68 },
+        { week: 'Week 3', followers: 52, engagement: 89 },
+        { week: 'Week 4', followers: 71, engagement: 124 }
+      ],
+      totalEngagement,
+      avgEngagement: Math.round(totalEngagement / tweets.length),
+      followerCount: user.public_metrics?.followers_count || 0,
+      tweetCount: tweets.length
+    };
+  };
+
+  const generateRecommendations = (analytics) => {
+    const recommendations = [];
+    
+    if (analytics.bestTimes?.length > 0) {
+      const bestTime = analytics.bestTimes[0];
+      recommendations.push({
+        title: 'Post During Peak Hours',
+        description: `Your audience is most active on ${bestTime.day} at ${bestTime.time}. Schedule important content for this time.`,
+        impact: 'High',
+        category: 'Timing'
+      });
+    }
+    
+    if (analytics.contentInsights?.length > 0) {
+      const bestContent = analytics.contentInsights[0];
+      recommendations.push({
+        title: `Increase ${bestContent.type} Content`,
+        description: `${bestContent.type} posts perform best with ${bestContent.avgEngagement} avg engagement.`,
+        impact: 'High',
+        category: 'Content'
+      });
+    }
+    
+    if (analytics.trendingHashtags?.length > 0) {
+      const topHashtag = analytics.trendingHashtags[0];
+      recommendations.push({
+        title: 'Use Your Top Hashtags',
+        description: `${topHashtag.tag} appears frequently. Keep using effective hashtags.`,
+        impact: 'Medium',
+        category: 'Hashtags'
+      });
+    }
+    
+    recommendations.push({
+      title: 'Engage With Your Community',
+      description: 'Reply to 5-10 accounts daily to boost visibility.',
+      impact: 'Medium',
+      category: 'Engagement'
+    });
+    
+    return recommendations;
+  };
+
+const handleConnect = async () => {
+  setIsLoading(true);
+  setError('');
+  
+  try {
+    const API_URL = 'https://verbose-space-invention-7vv49g9xq4qfxwp-3001.app.github.dev';
+    
+    console.log('🔐 Starting OAuth authentication...');
+    
+    const authResponse = await fetch(`${API_URL}/api/auth/twitter`);
+    
+    if (!authResponse.ok) {
+      const errorData = await authResponse.json();
+      throw new Error(errorData.error || 'Failed to start authentication');
+    }
+    
+    const { authUrl } = await authResponse.json();
+    console.log('✅ Got auth URL, redirecting to Twitter...');
+    
+    // Instead of popup, redirect the main window
+    window.location.href = authUrl;
+    
+  } catch (err) {
+    setError(err.message || 'Failed to start authentication');
+    console.error('❌ Auth error:', err);
+    setIsLoading(false);
+  }
+};
+
+const checkAuthStatus = async () => {
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const authStatus = urlParams.get('auth');
+    const username = urlParams.get('user');
+    const session = urlParams.get('session');
+    
+    console.log('📋 Auth status:', authStatus);
+    console.log('👤 Username:', username);
+    console.log('🔑 Session key:', session);
+    
+    // Clean URL immediately
+    window.history.replaceState({}, document.title, window.location.pathname);
+    
+    if (authStatus === 'success' && session) {
+      console.log('✅ Authentication successful!');
+      setSessionKey(session);
+      setIsLoading(true);
+      await fetchRealTwitterData(session);
+    } else if (authStatus === 'denied') {
+      setError('You denied the authorization request');
+      setIsLoading(false);
+    } else if (authStatus === 'error') {
+      const message = urlParams.get('message') || 'Unknown error';
+      setError(`Authentication failed: ${message}`);
+      setIsLoading(false);
+    } else {
+      setError('Authentication was cancelled');
+      setIsLoading(false);
+    }
+  } catch (err) {
+    console.error('❌ Error in checkAuthStatus:', err);
+    setError('Failed to check authentication status');
+    setIsLoading(false);
+  }
+};
+
+const fetchRealTwitterData = async (session) => {
+  try {
+    const API_URL = 'https://verbose-space-invention-7vv49g9xq4qfxwp-3001.app.github.dev';
+    
+    console.log('📥 Fetching real Twitter data with session:', session);
+    
+    // Fetch user data
+    const userResponse = await fetch(`${API_URL}/api/twitter/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionKey: session })
+    });
+    
+    if (!userResponse.ok) {
+      throw new Error('Failed to fetch user data');
+    }
+    
+    const userData = await userResponse.json();
+    console.log('✅ User data received:', userData.data.username);
+    
+    // Fetch tweets
+    const tweetsResponse = await fetch(`${API_URL}/api/twitter/tweets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionKey: session, count: 100 })
+    });
+    
+    if (!tweetsResponse.ok) {
+      throw new Error('Failed to fetch tweets');
+    }
+    
+    const tweetsData = await tweetsResponse.json();
+    console.log('✅ Tweets received:', tweetsData.data.length);
+    
+    // Process real data
+    const analytics = processTwitterData(userData.data, tweetsData.data);
+    setEngagementData(analytics);
+    setRecommendations(generateRecommendations(analytics));
+    setIsConnected(true);
+    
+  } catch (err) {
+    setError(err.message || 'Failed to fetch Twitter data');
+    console.error('❌ Error:', err);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-8">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <div className="text-center mb-8">
+              <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Target className="w-8 h-8 text-blue-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">Connect Your Twitter Account</h2>
+              <p className="text-gray-600">Enter your Bearer Token to start analyzing</p>
+            </div>
+
+            <div className="space-y-4">
+            <div className="text-center">
+              <p className="text-gray-600 mb-6">
+          
+                Connect your Twitter account securely using OAuth to see your real engagement analytics
+              </p>
+            </div>
+            
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {error}
+              </div>
+            )}
+            
+            <button
+              onClick={handleConnect}
+              disabled={isLoading}
+              className="w-full bg-blue-500 text-white py-4 rounded-lg font-semibold hover:bg-blue-600 disabled:bg-gray-400 flex items-center justify-center transition shadow-lg"
+            >
+              {isLoading ? (
+                <span>Connecting...</span>
+              ) : (
+                <>
+                  <svg className="w-6 h-6 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
+                  </svg>
+                  <span className="text-lg">Connect with Twitter</span>
+                </>
+              )}
+            </button>
+            
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <p className="text-xs text-blue-800 text-center">
+                🔒 Secure OAuth authentication - We never see your password
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <h3 className="font-semibold text-gray-800 mb-2">What you'll get:</h3>
+            <ul className="text-sm text-gray-600 space-y-1">
+              <li>✅ Real-time follower and engagement metrics</li>
+              <li>✅ Best times to post analysis</li>
+              <li>✅ Hashtag performance insights</li>
+              <li>✅ Personalized recommendations</li>
+            </ul>
+          </div>
+
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Get your Bearer Token:</strong> Visit developer.twitter.com → Your App → Keys and tokens
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-blue-600 w-10 h-10 rounded-lg flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800">Twitter Engagement Optimizer</h1>
+                <p className="text-sm text-gray-600">Real-time analytics</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => {
+                setIsConnected(false);
+                setEngagementData(null);
+              }}
+              className="px-4 py-2 bg-red-100 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-200"
+            >
+              Disconnect
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-8 py-6">
+        <div className="flex space-x-2 mb-6">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`px-6 py-2 rounded-lg font-semibold ${
+              activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'
+            }`}
+          >
+            Dashboard
+          </button>
+          <button
+            onClick={() => setActiveTab('recommendations')}
+            className={`px-6 py-2 rounded-lg font-semibold ${
+              activeTab === 'recommendations' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'
+            }`}
+          >
+            Recommendations
+          </button>
+        </div>
+
+        {activeTab === 'dashboard' && engagementData && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <p className="text-gray-500 text-sm">Total Followers</p>
+                <p className="text-2xl font-bold text-gray-800">{engagementData.followerCount.toLocaleString()}</p>
+                <Users className="w-6 h-6 text-blue-600 mt-2" />
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <p className="text-gray-500 text-sm">Avg Engagement</p>
+                <p className="text-2xl font-bold text-gray-800">{engagementData.avgEngagement}</p>
+                <BarChart3 className="w-6 h-6 text-green-600 mt-2" />
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <p className="text-gray-500 text-sm">Best Time</p>
+                <p className="text-xl font-bold text-gray-800">{engagementData.bestTimes[0]?.time || 'N/A'}</p>
+                <p className="text-sm text-blue-600">{engagementData.bestTimes[0]?.day || ''}</p>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <p className="text-gray-500 text-sm">Total Tweets</p>
+                <p className="text-2xl font-bold text-gray-800">{engagementData.tweetCount}</p>
+                <Sparkles className="w-6 h-6 text-yellow-600 mt-2" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <Clock className="w-5 h-5 mr-2 text-blue-600" />
+                  Best Times to Post
+                </h3>
+                {engagementData.bestTimes.length > 0 ? (
+                  engagementData.bestTimes.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded mb-2">
+                      <div>
+                        <p className="font-medium">{item.day}</p>
+                        <p className="text-sm text-gray-600">{item.time}</p>
+                      </div>
+                      <span className="text-blue-600 font-bold">{item.engagement}%</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500">Post more to see patterns!</p>
+                )}
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Top Hashtags</h3>
+                {engagementData.trendingHashtags.length > 0 ? (
+                  engagementData.trendingHashtags.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded mb-2">
+                      <p className="font-medium text-blue-600">{item.tag}</p>
+                      <span className="text-sm text-green-600">{item.growth}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500">Use hashtags to see insights!</p>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold mb-4">Content Performance</h3>
+              <div className="grid grid-cols-3 gap-4">
+                {engagementData.contentInsights.map((item, idx) => (
+                  <div key={idx} className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg">
+                    <p className="text-sm text-gray-600">{item.type}</p>
+                    <p className="text-2xl font-bold">{item.avgEngagement}</p>
+                    <p className="text-sm text-green-600">{item.improvement}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'recommendations' && (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 rounded-lg text-white mb-6">
+              <h2 className="text-2xl font-bold">Personalized Recommendations</h2>
+              <p className="text-blue-100">Based on your Twitter activity</p>
+            </div>
+            {recommendations.map((rec, idx) => (
+              <div key={idx} className="bg-white p-6 rounded-lg shadow">
+                <div className="flex items-center mb-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold mr-3 ${
+                    rec.impact === 'High' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    {rec.impact} Impact
+                  </span>
+                  <span className="text-sm text-gray-500">{rec.category}</span>
+                </div>
+                <h3 className="text-lg font-bold mb-2">{rec.title}</h3>
+                <p className="text-gray-600">{rec.description}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default TwitterEngagementApp;
